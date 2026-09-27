@@ -1,7 +1,7 @@
 # Medatur76's Game Of Assembly
 
-I was pretty bored during school at the begining of this week and decided to dedicate the 8hrs I try not falling asleep to actually learning a bit more about coding.    
-This is the product of that.    
+I was pretty bored during school last week and decided to dedicate the 8hrs I try not falling asleep to actually learning a bit more about coding.    
+This is the product of those 10 days of work.   
 682 lines of arm64 assembly to make a scaleable, editable grid that display Conways Game Of Life:
 
 ![Example run](final.gif)
