@@ -16,6 +16,8 @@ paused:
     .zero 1
 in:
     .zero 1
+cursor:
+    .zero 16
 .section .text
 .globl _start
 _loop1: //while (x6) - Simple loop to write out the top and bottom outline of the box
@@ -479,12 +481,12 @@ _r:
     adrp x1, in
     add x1, x1, :lo12:in
     mov x2, #1
-    svc 0
+    svc 0 //read(1, in, 1)
     cmp x0, #1
-    b.ne _exit
+    b.ne _exit //if (!read(1, in, 1)) break;
     ldrb w0, [x1]
     cmp w0, 0x0A
-    b.ne _b12
+    b.ne _b12 //if (in == '\n')
 _b11:
     adrp x1, paused
     ldrb w1, [x1, :lo12:paused]
@@ -494,33 +496,33 @@ _b11:
     b _b14
 _b12:
     cmp w0, 0x0D
-    b.eq _b11
+    b.eq _b11 //if (in != '\r')
     cmp w0, 0x20
-    b.ne _b13
+    b.ne _b14 //if (in == ' ')
     adrp x1, paused
     add x1, x1, :lo12:paused
     ldrb w0, [x1]
     eor w0, w0, #1
-    strb w0, [x1]
+    strb w0, [x1] //paused ^= 1
     cmp w0, #1
-    b.eq _b13
+    b.eq _b13 //if (!paused)
     mov x8, 0x40
     mov x0, #1
     adr x1, pausedMsg
     mov x2, #8
-    svc 0
+    svc 0 //write(1, "\x1b[2B\r\x1b[J", 8)
     mov x8, 0x40
     mov x0, #1
     adr x1, runningMsg
     mov x2, runMsgLen
-    svc 0
+    svc 0 //write(1, &runningMsg, runMsgLen)
     b _b14
-_b13:
+_b13: //if (paused)
     mov x8, 0x40
     mov x0, #1
     adr x1, pausedMsg
     mov x2, pausedLen
-    svc 0
+    svc 0 //write(1, &pausedMsg, pausedLen)
 _b14:
     b _main_loop
 _exit: //Cleanup code to exit the program
