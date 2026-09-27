@@ -1,22 +1,22 @@
 .section .bss
 .align 8
-displayBuff:
+displayBuff: //void *
     .zero 8
-procBuff:
+procBuff: //void *
     .zero 8
-h:
+h: //int
     .zero 8
-w:
+w: //int
     .zero 8
-orgTerm:
+orgTerm: //struct termios
     .zero 57
-bSize:
+bSize: //int
     .zero 8
-paused:
+paused: //bool
     .zero 1
-in:
+in: //char
     .zero 1
-cursor: //{y, x}
+cursor: //struct {int y; int x;}
     .zero 16
 .section .text
 .globl _start
@@ -228,18 +228,6 @@ _s4:
     svc 0
     adrp x1, procBuff
     str x0, [x1, :lo12:procBuff] //procBuff = mmap(NULL, bSize, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - Creates the buffer to process the next tick from the "old state"
-    mov w1, #2 //This bit till line 240 is a hardcoded begining state for the program. Will be updated later
-    strb w1, [x0]
-    mov w1, #4
-    strb w1, [x0, #5]
-    mov w1, #7
-    strb w1, [x0, #10]
-    mov w1, #64
-    strb w1, [x0, #9]
-    mov w1, #32
-    strb w1, [x0, #14]
-    mov w1, #224
-    strb w1, [x0, #19]
     mov x8, 0x40
     mov x0, #1
     adr x1, intro
@@ -495,26 +483,26 @@ _b11:
     b.ne _exit //if (paused)
     adrp x1, cursor
     add x1, x1, :lo12:cursor
-    ldr x0, [x1]
-    ldr x1, [x1, #8]
+    ldr x0, [x1] //x0 = cursor.y
+    ldr x1, [x1, #8] //x1 = cursor.x
     adrp x2, w
     ldr x2, [x2, :lo12:w]
-    madd x0, x0, x2, x1
-    and x1, x0, #7
+    madd x0, x0, x2, x1 //x0 = cursor.y * w + cursor.x
+    and x1, x0, #7 //x1 = x0 % 8
     mov x2, #1
-    lsl x1, x2, x1
+    lsl x1, x2, x1 //x1 = 1 << (x0 % 8)
     mov x2, #8
-    udiv x0, x0, x2
+    udiv x0, x0, x2 //x0 /= 8
     adrp x2, procBuff
     ldr x2, [x2, :lo12:procBuff]
-    add x2, x0, x2
-    ldrb w3, [x2]
-    eor w3, w1, w3
-    strb w3, [x2]
+    add x2, x0, x2 //x2 = &procBuff[x0]
+    ldrb w3, [x2] //w3 = procBuff[x0]
+    eor w3, w1, w3 //w3 ^= 1 << (x0 % 8)
+    strb w3, [x2] //procBuff[x0] = w3
     adrp x2, displayBuff
     ldr x2, [x2, :lo12:displayBuff]
-    add x2, x0, x2
-    strb w3, [x2]
+    add x2, x0, x2 //x2 = &displayBuff[x0]
+    strb w3, [x2] //displayBuff[x0] = w3
     b _b15
 _b12:
     cmp w0, 0x0D
@@ -551,7 +539,7 @@ _b14:
     cmp w1, #1
     b.ne _b15 //if (paused)
     cmp w0, 0x1B
-    b.ne _b15
+    b.ne _b15 //if (in == 0x1B)
     mov x8, 0x3F
     mov x0, #0
     adrp x1, in
@@ -559,10 +547,10 @@ _b14:
     mov x2, #1
     svc 0 //read(1, in, 1)
     cmp x0, #1
-    b.ne _b15
+    b.ne _b15 //if (read(1, in, 1))
     ldrb w0, [x1]
     cmp w0, 0x5B
-    b.ne _b15
+    b.ne _b15 //if (in == 0x5B)
     mov x8, 0x3F
     mov x0, #0
     adrp x1, in
@@ -570,20 +558,20 @@ _b14:
     mov x2, #1
     svc 0 //read(1, in, 1)
     cmp x0, #1
-    b.ne _b15
+    b.ne _b15 //if (read(1, in, 1))
     ldrb w0, [x1]
     cmp w0, 0x41
-    b.ne _cs1
+    b.ne _cs1 //if (in == 'A')
     adrp x1, cursor
     add x1, x1, :lo12:cursor
     ldr x0, [x1]
     sub x0, x0, #1
     cmp x0, #0
     cinc x0, x0, lt
-    str x0, [x1]
+    str x0, [x1] //cursor.y = max(cursor.y - 1, 0) - Moves the cursor up but stops it at the top of the box
     b _cse
 _cs1:
-    cmp w0, 0x42
+    cmp w0, 0x42 //if (in == 'B')
     b.ne _cs2
     adrp x1, cursor
     add x1, x1, :lo12:cursor
@@ -594,10 +582,10 @@ _cs1:
     sub x2, x2, #1
     cmp x0, x2
     csel x0, x0, x2, lt
-    str x0, [x1]
+    str x0, [x1] //cursor.y = min(cursor.y + 1, h - 1) - Moves the cursor down but stops it at the bottom of the box
     b _cse
 _cs2:
-    cmp w0, 0x43
+    cmp w0, 0x43 //if (in == 'C')
     b.ne _cs3
     adrp x1, cursor
     add x1, x1, :lo12:cursor
@@ -608,10 +596,10 @@ _cs2:
     sub x2, x2, #1
     cmp x0, x2
     csel x0, x0, x2, lt
-    str x0, [x1, #8]
+    str x0, [x1, #8] //cursor.x = min(cursor.x + 1, w - 1) - Moves the cursor right but stops it at the right edge of the box
     b _cse
 _cs3:
-    cmp w0, 0x44
+    cmp w0, 0x44 //if (in == 'D')
     b.ne _b15
     adrp x1, cursor
     add x1, x1, :lo12:cursor
@@ -619,8 +607,8 @@ _cs3:
     sub x0, x0, #1
     cmp x0, #0
     cinc x0, x0, lt
-    str x0, [x1, #8]
-_cse:
+    str x0, [x1, #8] //cursor.x = max(cursor.x - 1, 0) - Moves the cursor left but stops it at the left edge of the box
+_cse: //Youve seen this code like 4 times now and I dont wanna comment any more so yeahhh u get one line
     adrp x1, cursor
     add x1, x1, :lo12:cursor
     ldr x0, [x1]
@@ -638,7 +626,7 @@ _cse:
     add x2, x0, x2
     ldrb w3, [x2]
     eor w3, w1, w3
-    strb w3, [x2]
+    strb w3, [x2] //displayBuff[(cursor.y * w + cursor.x) / 8] ^= 1 << ((cursor.y * w + cursor.x) % 8)
 _b15:
     b _main_loop
 _exit: //Cleanup code to exit the program
