@@ -283,7 +283,6 @@ _loop3: //while (x6) - Whitespace for where the actual cells will go
     adr x1, pausedMsg
     mov x2, pausedLen
     svc 0 //write(1, "\x1b[2B\r\x1b[JUse the arrow keys to move the cursor\r\nPress enter to flip the selected cell\r\nPress space to resume the game", 3)
-    bl _memcpy
 _main_loop: //At this point, all preparations are done for console data that wont change. This label marks the game loop
     mov x8, 0x40
     mov x0, #1
@@ -293,7 +292,9 @@ _main_loop: //At this point, all preparations are done for console data that won
     adrp x6, h
     ldr x6, [x6, :lo12:h]
     mov x7, #2
-    udiv x6, x6, x7 // x6 = h / 2
+    udiv x7, x6, x7 // x7 = h / 2
+    and x6, x6, #1 // x6 = h % 2
+    add x6, x6, x7 // x6 = ceil(h / 2)
     mov x7, xzr // x7 = y = 0
 _loop4: //while (y < x6) - The ASM version of a for loop that goes through every row in the terminal, not by actual rows
     mov x9, xzr // x9 = x = 0

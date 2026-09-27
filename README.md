@@ -16,3 +16,5 @@ Additionally, the game features:
 * Command-line params to control width and height. You can pass one arg to set both with and height: ``./run.sh <length>`` or two to control them independently: ``./run.sh <height> <width>``
 * Instructions under the box to inform on keybinds and current game state
 * A cursor to edit the game during the paused state, controlled by arrow keys
+
+Just as an FYI if you get a segfault, I do recommend exiting the terminal as the default terminal state will pretty much be gone. Error checking is hard in assembly sorry
