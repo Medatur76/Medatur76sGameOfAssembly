@@ -6,4 +6,4 @@ ld bin/main.o -o bin/main
 
 chmod +x ./bin/main
 
-./bin/main
+./bin/main "$@"

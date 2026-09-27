@@ -63,8 +63,8 @@ int main(int argc, char *argv[]) {
     if (argc == 2) {
         w = h = atoi(argv[1]);
     } else if (argc >= 3) {
-        w = atoi(argv[1]);
-        h = atoi(argv[2]);
+        h = atoi(argv[1]);
+        w = atoi(argv[2]);
     } else {
         w = 40, h = 24;
     }
