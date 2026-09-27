@@ -16,7 +16,7 @@ paused:
     .zero 1
 in:
     .zero 1
-cursor:
+cursor: //{y, x}
     .zero 16
 .section .text
 .globl _start
@@ -295,8 +295,8 @@ _loop3: //while (x6) - Whitespace for where the actual cells will go
     adr x1, pausedMsg
     mov x2, pausedLen
     svc 0 //write(1, "\x1b[2B\r\x1b[JUse the arrow keys to move the cursor\r\nPress enter to flip the selected cell\r\nPress space to resume the game", 3)
-_main_loop: //At this point, all preparations are done for console data that wont change. This label marks the game loop
     bl _memcpy
+_main_loop: //At this point, all preparations are done for console data that wont change. This label marks the game loop
     mov x8, 0x40
     mov x0, #1
     adr x1, charLib + 19
@@ -324,7 +324,7 @@ _loop5: //while (x < w) - Another for loop that goes through every column
     and x1, x10, #7 //x1 = i % 8 - The position in the 1 byte space where the cell bit is
     mov x2, #1
     lsl x1, x2, x1 //x1 = 1 << x1
-    and x0, x0, x1 //x0 = displauBuff[x1] & (1 << x1) - Extracts the state of the upper cell, all other bits are 0
+    and x0, x0, x1 //x0 = displayBuff[x1] & (1 << x1) - Extracts the state of the upper cell, all other bits are 0
     cmp x0, 0
     mov x2, #2
     csel x11, x2, xzr, ne //x11 = a = x0 ? 2 : 0 - If the upper cell is alive, initialize a with 2 (aka 1 << 1), if not start with 0
@@ -340,7 +340,7 @@ _loop5: //while (x < w) - Another for loop that goes through every column
     and x1, x12, #7 //x1 = (i + w) % 8
     mov x2, #1
     lsl x1, x2, x1 //x1 = 1 << x1
-    and x0, x0, x1 //x0 = displauBuff[x1] & (1 << x1)
+    and x0, x0, x1 //x0 = displayBuff[x1] & (1 << x1)
     cmp x0, 0
     cinc x11, x11, ne //a += x0 ? 1 : 0 - Increments a if the lower cell is alive
     cmp x11, #3
@@ -454,6 +454,7 @@ _b10:
     add x7, x7, #1 //x7++
     cmp x7, x6
     b.lt _loop4 //if (x7 >= x6) break - The condition check for the outer for loop (interating though all the y values)
+    bl _memcpy
     mov x8, 0x40 //Update logic is done!
     adrp x0, paused
     ldrb w0, [x0, :lo12:paused]
@@ -491,9 +492,30 @@ _b11:
     adrp x1, paused
     ldrb w1, [x1, :lo12:paused]
     cmp w1, #1
-    b.ne _exit
-    //Cursor calc
-    b _b14
+    b.ne _exit //if (paused)
+    adrp x1, cursor
+    add x1, x1, :lo12:cursor
+    ldr x0, [x1]
+    ldr x1, [x1, #8]
+    adrp x2, w
+    ldr x2, [x2, :lo12:w]
+    madd x0, x0, x2, x1
+    and x1, x0, #7
+    mov x2, #1
+    lsl x1, x2, x1
+    mov x2, #8
+    udiv x0, x0, x2
+    adrp x2, procBuff
+    ldr x2, [x2, :lo12:procBuff]
+    add x2, x0, x2
+    ldrb w3, [x2]
+    eor w3, w1, w3
+    strb w3, [x2]
+    adrp x2, displayBuff
+    ldr x2, [x2, :lo12:displayBuff]
+    add x2, x0, x2
+    strb w3, [x2]
+    b _b15
 _b12:
     cmp w0, 0x0D
     b.eq _b11 //if (in != '\r')
@@ -516,7 +538,7 @@ _b12:
     adr x1, runningMsg
     mov x2, runMsgLen
     svc 0 //write(1, &runningMsg, runMsgLen)
-    b _b14
+    b _b15
 _b13: //if (paused)
     mov x8, 0x40
     mov x0, #1
@@ -524,6 +546,100 @@ _b13: //if (paused)
     mov x2, pausedLen
     svc 0 //write(1, &pausedMsg, pausedLen)
 _b14:
+    adrp x1, paused
+    ldrb w1, [x1, :lo12:paused]
+    cmp w1, #1
+    b.ne _b15 //if (paused)
+    cmp w0, 0x1B
+    b.ne _b15
+    mov x8, 0x3F
+    mov x0, #0
+    adrp x1, in
+    add x1, x1, :lo12:in
+    mov x2, #1
+    svc 0 //read(1, in, 1)
+    cmp x0, #1
+    b.ne _b15
+    ldrb w0, [x1]
+    cmp w0, 0x5B
+    b.ne _b15
+    mov x8, 0x3F
+    mov x0, #0
+    adrp x1, in
+    add x1, x1, :lo12:in
+    mov x2, #1
+    svc 0 //read(1, in, 1)
+    cmp x0, #1
+    b.ne _b15
+    ldrb w0, [x1]
+    cmp w0, 0x41
+    b.ne _cs1
+    adrp x1, cursor
+    add x1, x1, :lo12:cursor
+    ldr x0, [x1]
+    sub x0, x0, #1
+    cmp x0, #0
+    cinc x0, x0, lt
+    str x0, [x1]
+    b _cse
+_cs1:
+    cmp w0, 0x42
+    b.ne _cs2
+    adrp x1, cursor
+    add x1, x1, :lo12:cursor
+    ldr x0, [x1]
+    add x0, x0, #1
+    adrp x2, h
+    ldr x2, [x2, :lo12:h]
+    sub x2, x2, #1
+    cmp x0, x2
+    csel x0, x0, x2, lt
+    str x0, [x1]
+    b _cse
+_cs2:
+    cmp w0, 0x43
+    b.ne _cs3
+    adrp x1, cursor
+    add x1, x1, :lo12:cursor
+    ldr x0, [x1, #8]
+    add x0, x0, #1
+    adrp x2, w
+    ldr x2, [x2, :lo12:w]
+    sub x2, x2, #1
+    cmp x0, x2
+    csel x0, x0, x2, lt
+    str x0, [x1, #8]
+    b _cse
+_cs3:
+    cmp w0, 0x44
+    b.ne _b15
+    adrp x1, cursor
+    add x1, x1, :lo12:cursor
+    ldr x0, [x1, #8]
+    sub x0, x0, #1
+    cmp x0, #0
+    cinc x0, x0, lt
+    str x0, [x1, #8]
+_cse:
+    adrp x1, cursor
+    add x1, x1, :lo12:cursor
+    ldr x0, [x1]
+    ldr x1, [x1, #8]
+    adrp x2, w
+    ldr x2, [x2, :lo12:w]
+    madd x0, x0, x2, x1
+    and x1, x0, #7
+    mov x2, #1
+    lsl x1, x2, x1
+    mov x2, #8
+    udiv x0, x0, x2
+    adrp x2, displayBuff
+    ldr x2, [x2, :lo12:displayBuff]
+    add x2, x0, x2
+    ldrb w3, [x2]
+    eor w3, w1, w3
+    strb w3, [x2]
+_b15:
     b _main_loop
 _exit: //Cleanup code to exit the program
     mov x8, 0x40
