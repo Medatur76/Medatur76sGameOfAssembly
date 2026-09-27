@@ -12,6 +12,10 @@ orgTerm:
     .zero 57
 bSize:
     .zero 8
+paused:
+    .zero 1
+in:
+    .zero 1
 .section .text
 .globl _start
 _loop1: //while (x6) - Simple loop to write out the top and bottom outline of the box
@@ -110,6 +114,10 @@ _loop10:
 _loop10c:
     ret
 _start: //Entry point
+    adrp x0, paused
+    add x0, x0, :lo12:paused
+    mov w1, #1
+    strb w1, [x0]
     ldr x0, [sp] //x0 = argc
     cmp x0, #2
     b.lt _s3 //if (argc >= 2)
@@ -218,7 +226,7 @@ _s4:
     svc 0
     adrp x1, procBuff
     str x0, [x1, :lo12:procBuff] //procBuff = mmap(NULL, bSize, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0) - Creates the buffer to process the next tick from the "old state"
-    mov w1, #2 //This bit till line 175 is a hardcoded begining state for the program. Will be updated later
+    mov w1, #2 //This bit till line 240 is a hardcoded begining state for the program. Will be updated later
     strb w1, [x0]
     mov w1, #4
     strb w1, [x0, #5]
@@ -279,10 +287,19 @@ _loop3: //while (x6) - Whitespace for where the actual cells will go
     bl _loop1
     mov x0, #1
     adr x1, charLib + 16
-    mov x2, #9
+    mov x2, #3
     svc 0 //write(1, "┘", 3)
+    mov x0, #1
+    adr x1, pausedMsg
+    mov x2, pausedLen
+    svc 0 //write(1, "\x1b[2B\r\x1b[JUse the arrow keys to move the cursor\r\nPress enter to flip the selected cell\r\nPress space to resume the game", 3)
 _main_loop: //At this point, all preparations are done for console data that wont change. This label marks the game loop
     bl _memcpy
+    mov x8, 0x40
+    mov x0, #1
+    adr x1, charLib + 19
+    mov x2, #6
+    svc 0 //write(1, "\x1b[3;2f", 6)
     adrp x6, h
     ldr x6, [x6, :lo12:h]
     mov x7, #2
@@ -356,6 +373,10 @@ _b3: //if (!a) - Default behaviour for if both are dead
     mov x2, #1
     svc 0 //write(1, " ", 1)
 _b4: //This label marks the begining of the update/tick logic
+    adrp x12, paused
+    ldrb w12, [x12, :lo12:paused]
+    cmp w12, #1
+    b.eq _b10
     mov x12, #2
     mul x12, x12, x7 //x12 = 2 * y - Remember, y is h / 2 so you have to * 2 to get the actual y coordinate
     bl _getNeighbors //x0 = n = getNeighbors(x9, x12) - Gets the neighbors of the upper cell
@@ -432,10 +453,10 @@ _b10:
     cmp x7, x6
     b.lt _loop4 //if (x7 >= x6) break - The condition check for the outer for loop (interating though all the y values)
     mov x8, 0x40 //Update logic is done!
-    mov x0, #1
-    adr x1, charLib + 19
-    mov x2, #6
-    svc 0 //write(1, "\x1b[3;2f", 6)
+    adrp x0, paused
+    ldrb w0, [x0, :lo12:paused]
+    cmp w0, #1
+    b.eq _r
     ldr x9, time
     ldr x10, time + 8
     stp x9, x10, [sp, #-16]! //*sp = time - ppoll updates the time struct input, so I just make a temporary one on the stack. lil bit of AI was here sry
@@ -446,7 +467,62 @@ _b10:
     mov x3, 0
     mov x4, 0
     svc 0 //ppoll([{fd=0, events=POLLIN}], 1, {tv_sec=0, tv_nsec=150000000}, NULL, 0) - Waits 150 msec for an input into the console from the user, otherwise continues the loop
-    cbz x0, _main_loop //if (x0) break - If there was an input, exit the loop
+    cbz x0, _main_loop //if (x0) break - If there wasnt an input, loop back
+    adrp x0, fds + 6
+    ldrh w0, [x0]
+    and w0, w0, #1
+    cmp w0, #0
+    b.eq _main_loop
+_r:
+    mov x8, 0x3F
+    mov x0, #0
+    adrp x1, in
+    add x1, x1, :lo12:in
+    mov x2, #1
+    svc 0
+    cmp x0, #1
+    b.ne _exit
+    ldrb w0, [x1]
+    cmp w0, 0x0A
+    b.ne _b12
+_b11:
+    adrp x1, paused
+    ldrb w1, [x1, :lo12:paused]
+    cmp w1, #1
+    b.ne _exit
+    //Cursor calc
+    b _b14
+_b12:
+    cmp w0, 0x0D
+    b.eq _b11
+    cmp w0, 0x20
+    b.ne _b13
+    adrp x1, paused
+    add x1, x1, :lo12:paused
+    ldrb w0, [x1]
+    eor w0, w0, #1
+    strb w0, [x1]
+    cmp w0, #1
+    b.eq _b13
+    mov x8, 0x40
+    mov x0, #1
+    adr x1, pausedMsg
+    mov x2, #8
+    svc 0
+    mov x8, 0x40
+    mov x0, #1
+    adr x1, runningMsg
+    mov x2, runMsgLen
+    svc 0
+    b _b14
+_b13:
+    mov x8, 0x40
+    mov x0, #1
+    adr x1, pausedMsg
+    mov x2, pausedLen
+    svc 0
+_b14:
+    b _main_loop
 _exit: //Cleanup code to exit the program
     mov x8, 0x40
     mov x0, 1
@@ -486,8 +562,15 @@ introLen = . - intro
 outro:
     .ascii "\x1b[3J\x1b[2J\x1b[H\x1b[?25h\x1b[?1049l"
 outroLen = . - outro
+runningMsg:
+    .ascii "Press space to pause the game\r\nPress enter to exit"
+runMsgLen = . - runningMsg
+pausedMsg:
+    .ascii "\x1b[2B\r\x1b[JUse the arrow keys to move the cursor\r\nPress enter to flip the selected cell\r\nPress space to resume the game"
+pausedLen = . - pausedMsg
 charLib:
     .ascii "─│\r\n┐\r\n└┘\x1b[3;2f █▀▄\x1b[1B\x1b[2G"
 fds: //[{fd=0, events=POLLIN}] - Technically the "list" of fds for ppoll
     .word 0
-    .word 1
+    .short 1
+    .short 0
