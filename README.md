@@ -9,7 +9,7 @@ This is the product of those 10 days of work.
 There is also a version in C that is 100x more readable to understand the logic behind the two big features tactics I employed for fun:
 
 * Using half and full box characters to display two cells in one character space on the console
-* Storing each cell as one byte in a massive array rather than storing each as a char, making it 8x more efficient
+* Storing each cell as one bit in a massive array rather than storing each as a char, making it 8x more efficient
 
 Additionally, the game features:
 
